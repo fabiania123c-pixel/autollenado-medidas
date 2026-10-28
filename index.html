@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Autollenado de Medidas</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,800&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">People Analytics · Nómina · Temporada</div>
+    <h1>Autollenado de Medidas de Contratación</h1>
+    <p class="lede">Sube la base del <b>Link de ingreso</b> y el formato <b>MEDIDAS_CONTRATACION</b> vacío. Cada colaborador cae en la fila de su <b>posición</b>, las fórmulas de nómina calculan solas y el resto del archivo queda intacto.</p>
+    <div class="privacy"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M4 7V5a4 4 0 0 1 8 0v2M3 7h10v7H3z"/></svg>Los archivos se procesan en tu navegador. No se suben a ningún servidor.</div>
+  </header>
+
+  <section class="steps" aria-label="Pasos">
+    <div class="step">
+      <div class="n">Paso 1</div>
+      <h2>Base de ingresos</h2>
+      <label class="drop" id="drop-base">
+        <input type="file" id="in-base" accept=".xlsx,.xls,.xlsm">
+        <span class="pick">Elegir archivo</span>
+        <span class="hint">o arrástralo aquí · Link_de_ingreso.xlsx</span>
+        <span class="fname" id="fn-base"></span>
+      </label>
+      <div class="meta" id="meta-base">Respuestas del formulario, con la columna POSICION.</div>
+    </div>
+    <div class="step">
+      <div class="n">Paso 2</div>
+      <h2>Formato de nómina</h2>
+      <label class="drop" id="drop-fmt">
+        <input type="file" id="in-fmt" accept=".xlsm,.xlsx">
+        <span class="pick">Elegir archivo</span>
+        <span class="hint">o arrástralo aquí · MEDIDAS_CONTRATACION.xlsm</span>
+        <span class="fname" id="fn-fmt"></span>
+      </label>
+      <div class="meta" id="meta-fmt">El formato tal cual lo entrega nómina, con las posiciones cargadas.</div>
+    </div>
+    <div class="step">
+      <div class="n">Paso 3</div>
+      <h2>Llenar y descargar</h2>
+      <p class="sub">Revisa las alertas, completa lo que falta y descarga el formato lleno. El reporte te dice qué revisar.</p>
+      <button class="primary" id="btn-dl" disabled>Descargar formato lleno</button>
+      <button class="ghost" id="btn-csv" disabled>Descargar reporte (.csv)</button>
+      <div class="dl-note" id="dl-note">Sube los dos archivos para empezar.</div>
+    </div>
+  </section>
+
+  <section id="results" hidden>
+    <div style="display:grid;gap:16px">
+      <div class="stats">
+        <div class="stat"><div class="v" id="s-base">0</div><div class="l">en la base</div></div>
+        <div class="stat ok"><div class="v" id="s-ok">0</div><div class="l">cargados en el formato</div></div>
+        <div class="stat warn"><div class="v" id="s-pend">0</div><div class="l">datos por completar aquí</div></div>
+        <div class="stat bad"><div class="v" id="s-bad">0</div><div class="l">no cargados (revisar base)</div></div>
+      </div>
+
+      <div class="panel" id="pend-panel" hidden>
+        <div class="panel-head">
+          <div><h2>Completa antes de descargar</h2><p class="sub">El formulario no pide estos datos. Lo que elijas aquí entra directo al formato.</p></div>
+        </div>
+        <div class="pend" id="pend-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div><h2>Reporte por colaborador</h2><p class="sub" id="rep-sub"></p></div>
+          <button class="ghost" id="btn-filter" aria-pressed="false">Ver solo alertas</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Posición</th><th>Colaborador</th><th>Fila</th><th>Estado</th><th>Observación</th></tr></thead>
+            <tbody id="rep-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <details open>
+      <summary>Qué columna del formato se llena con qué dato</summary>
+      <div class="map" style="margin-top:14px" id="map"></div>
+    </details>
+    <p class="sub">Supuestos: la provincia es PICHINCHA salvo que la ciudad sea de otra provincia. El título (columna AM) sale del nivel de estudios y de si la fecha de fin ya pasó. Las respuestas tipo "N/A", "No tengo" o "0000" no cuentan como cargas.</p>
+  </section>
+</div>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
