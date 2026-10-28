@@ -1,0 +1,9 @@
+# Datos personales: nunca al repositorio
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+*.zip
+.vercel
+.DS_Store
+node_modules/

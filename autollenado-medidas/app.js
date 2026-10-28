@@ -16,7 +16,7 @@ const ID_COLS=new Set(["Y","AY","BL"]);
 const esc=s=>String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const unesc=s=>s.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,"&");
 function clean(v){if(v==null)return null;if(typeof v==="number")return v;const s=String(v).replace(/\s+/g," ").trim();return s||null}
-function util(v){if(v==null)return null;if(typeof v==="number")return v;const s=String(v);const k=s.toUpperCase().replace(/[^A-Z0-9]/g,"");if(BASURA.has(k)||s.startsWith("1/1/0001"))return null;return v}
+function util(v){if(v==null)return null;if(typeof v==="number")return v===0?null:v;const s=String(v);const k=s.toUpperCase().replace(/[^A-Z0-9]/g,"");if(BASURA.has(k)||s.startsWith("1/1/0001"))return null;return v}
 function serialFromYMD(y,m,d){return Math.round(Date.UTC(y,m-1,d)/864e5)+25569}
 function toSerial(v){
   if(v==null)return null;
@@ -34,6 +34,28 @@ function idStr(v){if(v==null)return null;let s=typeof v==="number"?String(Math.r
 function cel(v){if(v==null)return null;const d=String(typeof v==="number"?Math.round(v):v).replace(/\D/g,"");if(/^9\d{8}$/.test(d))return "0"+d;if(/^5939\d{8}$/.test(d))return "0"+d.slice(3);return v}
 const colIdx=c=>[...c].reduce((a,ch)=>a*26+ch.charCodeAt(0)-64,0);
 
+// Sexo a partir del nombre (nombres comunes en Ecuador). Devuelve "VARON", "MUJER" o null si no es seguro.
+const SEXO_M=new Set("aaron abel abraham adam adan adolfo adrian agustin alan alberto aldo alejandro alessandro alex alexander alexis alfonso alfredo alonso alvaro anderson andre andres andrux angel anibal antonio ariel armando arturo augusto axel bayron benjamin bernardo braulio brayan bruno bryan byron camilo carlos cesar christian christopher cristhian cristian cristobal damian daniel dante dario darlin darwin david dennis derick diego dilan dylan edgar edison eduardo edwin efrain elias emanuel emiliano emilio enrique erick ernesto esteban estefano esteffano fabian fabricio facundo felipe fernando francisco franco frank fredy gabriel gael gerardo german gonzalo guillermo gustavo hector henry henrry hernan hugo ian ignacio iker isaac isaias ismael ithan ivan jack jaime jairo javier jean jefferson jeremy jesus jhon jhonny jhordy jimmy joaquin joel johan john jonathan jordan jorge jose joseph josue joshet jostin juan julian julio junior justin kevin kelvin leandro leonardo liam lucas luciano luis manuel marco marcos mario marlon martin mateo matias mauricio maximiliano mayer miguel milton nelson nicolas noah omar oscar pablo patricio paul pedro rafael ramiro raul ricardo roberto robinson rodrigo rolando ruben salvatore samuel santiago sebastian sergio steven steveen stalin andi teo thiago thomas tiago tomas ulises valentin victor vinicio walter wilmer william wilson wiston xavier yandri zabdiel".split(" "));
+const SEXO_F=new Set("abigail adriana aime aitana alejandra alexandra alicia alison alisson allyson amanda amy ambar ana anabel anahi anai rafaella andrea angela angie antonella ariana aylen beatriz belen blanca brenda camila carla carmen carolina catalina chloe cristina dana danna daniela dayana denisse diana domenica dominique elaine elena elizabeth emilia emily erika estefania estefany evelyn fernanda gabriela genesis geraldin gisela guadalupe heydy ines isabel isabella ivanna ivonne jazmin jeanely jennifer jessica johanna julia juliana karen karla katherine keyla laura layla leidy leishy leydi lia liz lizbeth lizeth lorena loren lucia luz madeline maria mariagny mariana marilin martina mayerly meredith micaela melanie melany melisa michelle milena mishell monica nicole noemi paola patricia paula priscila rafaela raquel rebeca rianna romina rosa rubi ruth salome samara sara sarai sarahi scarleth sofia sol susana tatiana valentina valeria vanessa veronica victoria viviana ximena yadira yessenia yomayra yudrei zoe".split(" "));
+function sinTilde(s){return s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase()}
+function sexoNombre(nombre){
+  if(!nombre)return null;
+  for(const w of sinTilde(String(nombre)).split(/[^a-zñ]+/).filter(Boolean).slice(0,2)){
+    if(SEXO_M.has(w))return "VARON";
+    if(SEXO_F.has(w))return "MUJER";
+  }
+  const w=sinTilde(String(nombre)).split(/[^a-zñ]+/).filter(Boolean)[0]||"";
+  if(/a$/.test(w)&&!/(luca|joshua|elias)$/.test(w))return "MUJER";
+  if(/o$/.test(w))return "VARON";
+  return null;
+}
+
+// cédula ecuatoriana: dígito verificador (módulo 10)
+function cedOk(s){s=String(s||"");if(!/^\d{10}$/.test(s))return false;let t=0;for(let i=0;i<9;i++){let p=+s[i]*(i%2?1:2);if(p>9)p-=9;t+=p}return (10-t%10)%10===+s[9]}
+// ciudad: variantes mal escritas de Quito / Sangolquí
+function ciudad(v){if(v==null)return null;const k=String(v).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();if(/\bQUI[TR]O\b/.test(k))return "Quito";if(/SANGOLQUI/.test(k))return "Sangolquí";return v}
+// nombres: dígitos pegados a letras por error de teclado (CASTILL9 -> CASTILLO)
+function nombreFix(v){if(v==null)return v;return String(v).replace(/([A-Za-zÁÉÍÓÚÑáéíóúñ])[09](?=[A-Za-zÁÉÍÓÚÑáéíóúñ]|\b)/g,(m,a)=>a+(a===a.toUpperCase()?"O":"o"))}
 /* ---------- estado ---------- */
 let BASE=null, FMT=null, MODEL=null;
 const edits={};
@@ -41,18 +63,34 @@ const edits={};
 /* ---------- lectura base ---------- */
 async function readBase(file){
   const wb=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:false});
-  let rows=null,hdr=-1;
+  let rows=null,hdr=-1,fila0=1;
   for(const n of wb.SheetNames){
-    const rr=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null});
+    const ws=wb.Sheets[n];if(!ws["!ref"])continue;
+    const rr=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:true});
     const h=rr.findIndex(r=>r&&String(r[4]||"").startsWith("Ingresa tus"));
-    if(h>=0){rows=rr;hdr=h;break}
+    if(h>=0){rows=rr;hdr=h;fila0=XLSX.utils.decode_range(ws["!ref"]).s.r+1;break}
   }
   if(hdr<0)throw new Error("No encuentro la columna «Ingresa tus dos Nombres». ¿Es la base del Link de ingreso?");
   const H=rows[hdr].map(x=>String(x||"").trim().toLowerCase());
   const ESPERA=[[4,"ingresa tus dos nombres"],[5,"ingresa tu primer apellido"],[11,"número de cédula"],[12,"número de cta"],[13,"tipo de cta"],[33,"estudios"],[39,"correo"],[40,"en el caso de tener cónyuge, ingrese el apellido"]];
   const malas=ESPERA.filter(([i,t])=>!(H[i]||"").startsWith(t));
   if(malas.length)throw new Error("La base cambió de estructura: no encuentro «"+malas[0][1]+"» en la columna "+XLSX.utils.encode_col(malas[0][0])+". Avísale a People Analytics.");
-  const data=rows.slice(hdr+1).filter(r=>r&&r[4]&&!String(r[4]).startsWith("Ingresa tus")).map(r=>{const a=[];for(let i=0;i<43;i++)a[i]=clean(r[i]);return a});
+  const TIPOS=["Cuenta de Ahorros","Cuenta Corriente"],NIV=["Primaria","Secundaria","Tecnica y Superior","Universitaria","Post Grado"];
+  const data=[];
+  rows.forEach((r,i)=>{
+    if(i<=hdr||!r||!r[4]||String(r[4]).startsWith("Ingresa tus"))return;
+    let a=[];for(let j=0;j<60;j++)a[j]=clean(r[j]);
+    // fila corrida: buscar cuántas columnas se movieron desde la M (cuenta) y volver a alinear
+    let corr=0;
+    if(!TIPOS.includes(a[13])){
+      for(let k=1;k<=4;k++){
+        if(TIPOS.includes(a[13+k])&&(a[33+k]==null||NIV.includes(a[33+k]))&&(a[39+k]==null||String(a[39+k]).includes("@"))){corr=k;break}
+      }
+      if(corr)a=a.slice(0,12).concat(a.slice(12+corr));
+    }
+    a.filaBase=fila0+i;a.corrida=corr;
+    data.push(a);
+  });
   if(!data.length)throw new Error("La base no tiene colaboradores.");
   const sinPos=data.filter(r=>!r[0]).length;
   if(sinPos===data.length)throw new Error("La columna POSICION (A) está vacía. Abre la base en Excel, deja que calcule las posiciones, guarda y vuelve a subirla.");
@@ -109,33 +147,52 @@ function build(){
   const repetidas=BASE.data.filter(b=>{const k=ced(b);return k&&ultima[k].b!==b});
   const usar=BASE.data.filter(b=>!repetidas.includes(b));
   for(const b of usar){const p=b[0]!=null?String(b[0]).trim():null;if(p)(porPos[p]=porPos[p]||[]).push(nom(b))}
-  for(const b of repetidas)rep.push({pos:b[0]!=null?String(b[0]):"—",nombre:nom(b),fila:"",estado:"warn",obs:"Respondió el formulario más de una vez: se usó su última respuesta"});
+  for(const b of repetidas)rep.push({pos:b[0]!=null?String(b[0]):"—",nombre:nom(b),fb:b.filaBase,fila:"",estado:"warn",obs:"Respondió el formulario más de una vez: se usó su última respuesta"});
   const NIVELES=new Set(["Primaria","Secundaria","Tecnica y Superior","Universitaria","Post Grado"]);
   for(const b of usar){
     const pos=b[0]!=null?String(b[0]).trim():null;
     const nombre=nom(b);
-    if(!pos||!/^\d+$/.test(pos)){bad++;rep.push({pos:pos||"—",nombre,fila:"",estado:"bad",obs:pos?"La posición en la base no es válida («"+pos+"»): revisa la fórmula de POSICION":"Sin posición en la base"});continue}
-    if(!(pos in FMT.filaPos)){bad++;rep.push({pos,nombre,fila:"",estado:"bad",obs:"Esta posición no existe en el formato"});continue}
-    if(porPos[pos].length>1){bad++;rep.push({pos,nombre,fila:FMT.filaPos[pos],estado:"bad",obs:"Posición repetida en la base ("+porPos[pos].join(" / ")+"). No se cargó ninguno: corrige la posición en la base."});continue}
+    if(!pos||!/^\d+$/.test(pos)){bad++;rep.push({pos:pos||"—",nombre,fb:b.filaBase,fila:"",estado:"bad",obs:pos?"La posición en la base no es válida («"+pos+"»): revisa la fórmula de POSICION":"Sin posición en la base"});continue}
+    if(!(pos in FMT.filaPos)){bad++;rep.push({pos,nombre,fb:b.filaBase,fila:"",estado:"bad",obs:"Esta posición no existe en el formato"});continue}
+    if(porPos[pos].length>1){bad++;rep.push({pos,nombre,fb:b.filaBase,fila:FMT.filaPos[pos],estado:"bad",obs:"Posición repetida en la base ("+porPos[pos].join(" / ")+"). No se cargó ninguno: corrige la posición en la base."});continue}
     const corr=[];
     if(!["Cuenta de Ahorros","Cuenta Corriente"].includes(b[13]))corr.push("tipo de cuenta");
     if(b[39]&&!String(b[39]).includes("@"))corr.push("correo");
     if(b[33]&&!NIVELES.has(b[33]))corr.push("nivel de estudios");
     if(b[12]!=null&&b[11]!=null&&String(b[12])===String(b[11]))corr.push("cuenta igual a la cédula");
     if(toSerial(b[8])==null)corr.push("fecha de nacimiento");
-    if(corr.length>=1&&(corr.length>=2||corr.includes("cuenta igual a la cédula"))){bad++;rep.push({pos,nombre,fila:FMT.filaPos[pos],estado:"bad",obs:"Datos corridos de columna en la base ("+corr.join(", ")+"). No se cargó: revisa esta fila en la base."});continue}
+    if(corr.length>=1&&(corr.length>=2||corr.includes("cuenta igual a la cédula"))){bad++;rep.push({pos,nombre,fb:b.filaBase,fila:FMT.filaPos[pos],estado:"bad",obs:"Datos corridos de columna en la base ("+corr.join(", ")+"). No se cargó: revisa esta fila en la base."});continue}
     const r=FMT.filaPos[pos],obs=[];
-    const v={Q:b[3],R:b[5],S:b[6],T:b[4],U:b[7],V:b[8],W:ECIVIL[b[9]]||b[9],X:NAC[String(b[10]||"").toUpperCase()]||b[10],
-      Y:idStr(b[11]),Z:"PRODUBANCO",AA:b[12],AB:b[13],AC:b[15],AE:b[14],AF:b[16],AG:provincia(b[14]),
-      AH:b[36],AI:"ECUADOR",AJ:b[34],AK:b[33],AL:b[35],AM:titulo(b[33],b[37]),AN:b[39],AO:cel(b[38])};
-    if(!b[3])pend.push({key:r+"Q",row:r,col:"Q",who:nombre,what:"Tratamiento del colaborador",opts:["Sr.","Sra.","Srta."]});
+    for(const i of [4,5,6]){const f=nombreFix(b[i]);if(f!==b[i]){obs.push(`Nombre «${b[i]}» corregido a «${f}»`);b[i]=f}}
+    const resi=ciudad(util(b[14]));let resiF=resi;
+    if(resi&&!/^(Quito|Sangolquí)$/.test(resi)&&/^(ECUADOR|PICHINCHA)$/i.test(String(resi).trim())){resiF="Quito";obs.push(`Ciudad de residencia «${resi}»: se puso Quito`)}
+    const mail=b[39]!=null?String(b[39]).replace(/\s+/g,""):null;
+    if(mail&&!/^[^@]+@[^@]+\.[A-Za-z]{2,}$/.test(mail))obs.push(`Correo incompleto («${mail}»)`);
+    const v={Q:b[3],R:b[5],S:b[6],T:b[4],U:ciudad(util(b[7])),V:b[8],W:ECIVIL[b[9]]||b[9],X:NAC[String(b[10]||"").toUpperCase()]||b[10],
+      Y:idStr(b[11]),Z:"PRODUBANCO",AA:b[12],AB:b[13],AC:util(b[15]),AE:resiF,AF:util(b[16]),AG:provincia(resiF),
+      AH:b[36],AI:"ECUADOR",AJ:util(b[34]),AK:b[33],AL:util(b[35]),AM:titulo(b[33],b[37]),AN:mail,AO:cel(b[38])};
+    if(b.corrida)obs.push(`Fila corregida: venía corrida ${b.corrida} columna(s) en la base`);
+    const sx=sexoNombre(b[4]);const casada=/casad|uni[oó]n/i.test(b[9]||"");
+    const tratSug=sx==="VARON"?"Sr.":sx==="MUJER"?(casada?"Sra.":"Srta."):null;
+    if(!b[3]){
+      if(tratSug){v.Q=tratSug;obs.push(`Tratamiento vacío: se puso ${tratSug} por el nombre`)}
+      else pend.push({key:r+"Q",row:r,col:"Q",who:nombre,what:"Tratamiento del colaborador",opts:["Sr.","Sra.","Srta."]});
+    }else if(sx&&((sx==="VARON")!==(b[3]==="Sr."))){v.Q=tratSug;obs.push(`Tratamiento «${b[3]}» no coincide con el nombre: se cambió a ${tratSug}`)}
     if(v.Y&&!/^\d{10}$/.test(v.Y))obs.push(`Cédula con ${v.Y.length} dígitos`);
+    else if(v.Y&&!cedOk(v.Y)&&v.X==="ECUADOR")obs.push(`Cédula ${v.Y} no pasa el dígito verificador: revisa si está mal escrita`);
     if(v.AA!=null&&!/^\d{10,11}$/.test(String(v.AA)))obs.push(`Cuenta Produbanco con ${String(v.AA).length} caracteres («${v.AA}»)`);
     if(v.AO!=null&&String(v.AO).replace(/\D/g,"").length!==10)obs.push(`Celular raro («${v.AO}»)`);
     const cargas=[];
     for(const [tipo,idx] of [["Cónyuge",[40,18,19,20,21,22]],["Hijo",[41,23,24,25,26,27]],["Hijo",[42,28,29,30,31,32]]]){
       const c=idx.map(i=>util(b[i]));
-      if(c[1]){cargas.push([tipo,...c]);const ced=idStr(c[5]);if(c[5]&&!/^\d{10}$/.test(ced))obs.push(`${tipo} ${c[1]}: cédula rara «${c[5]}»`)}
+      if(c[1]){
+        const ced=idStr(c[5]);
+        if(c[5]&&!/^\d+$/.test(ced)){obs.push(`${tipo} ${c[1]}: en cédula escribió «${c[5]}», quedó vacía`);c[5]=null}
+        else if(c[5]&&!cedOk(ced))obs.push(`${tipo} ${c[1]}: cédula ${ced} no pasa el dígito verificador`);
+        if(c[2]==null)obs.push(`${tipo} ${c[1]}: sin fecha de nacimiento`);
+        c[0]=c[0]&&nombreFix(c[0]);c[4]=ciudad(c[4]);
+        cargas.push([tipo,...c]);
+      }
     }
     if(cargas.length>2)obs.push(`${cargas.length} cargas y el formato tiene 2 espacios: falta ${cargas[2][2]}`);
     const slots=[["AP","AQ","AR","AS","AT","AU","AV","AW","AX","AY"],["BC","BD","BE","BF","BG","BH","BI","BJ","BK","BL"]];
@@ -143,11 +200,14 @@ function build(){
       const [tipo,ap,nom,fnac,nac,ciu,ced]=c;const [a1,a2]=splitAp(ap);const n=NAC[String(nac||"").toUpperCase()]||nac;
       [tipo,a1,a2,nom,null,fnac,n,ciu,(n&&n!=="OTRA")?n:null,idStr(ced)].forEach((x,j)=>v[slots[i][j]]=x);
       if(!ap)obs.push(`${tipo} ${nom} sin apellidos`);
-      pend.push({key:r+slots[i][4],row:r,col:slots[i][4],who:nombre,what:`Sexo de ${nom} (${tipo.toLowerCase()})`,opts:["VARON","MUJER"]});
+      let sc=sexoNombre(nom);
+      if(!sc&&tipo==="Cónyuge"){const t=v.Q||b[3];sc=t==="Sr."?"MUJER":(t==="Sra."||t==="Srta.")?"VARON":null}
+      if(sc)v[slots[i][4]]=sc;
+      pend.push({key:r+slots[i][4],row:r,col:slots[i][4],who:nombre,what:`Sexo de ${nom} (${tipo.toLowerCase()})`,opts:["VARON","MUJER"],auto:sc});
     });
     for(const c of ["V","AH","AU","BH"])if(v[c]!=null&&toSerial(v[c])==null){obs.push(`Fecha inválida en ${c} («${v[c]}»), quedó vacía`);v[c]=null}
     fill[r]=v;ok++;
-    rep.push({pos,nombre,fila:r,estado:obs.length?"warn":"ok",obs:obs.join(" · ")||"Listo"});
+    rep.push({pos,nombre,fb:b.filaBase,fila:r,estado:obs.length?"warn":"ok",obs:obs.join(" · ")||"Listo"});
   }
   return {rep,fill,pend,ok,bad};
 }
@@ -191,7 +251,7 @@ async function generateXlsx(){
   return {xbytes,isM};
 }
 function buildCsv(){
-  const csvRows=[["POSICION","COLABORADOR","FILA FORMATO","ESTADO","OBSERVACION"],...MODEL.rep.map(x=>[x.pos,x.nombre,x.fila,{ok:"OK",warn:"REVISAR",bad:"NO CARGADO"}[x.estado],x.obs])];
+  const csvRows=[["POSICION","COLABORADOR","FILA EN LA BASE","FILA EN EL FORMATO","ESTADO","OBSERVACION"],...MODEL.rep.map(x=>[x.pos,x.nombre,x.fb??"",x.fila,{ok:"OK",warn:"REVISAR",bad:"NO CARGADO"}[x.estado],x.obs])];
   const csv="﻿"+csvRows.map(r=>r.map(c=>{let x=String(c??"");if(/^[=+\-@]/.test(x))x="'"+x;return `"${x.replace(/"/g,'""')}"`}).join(",")).join("\r\n");
   return csv;
 }
@@ -211,11 +271,12 @@ function render(){
   if(!ready){$("results").hidden=true;return}
   for(const k in edits)delete edits[k];
   MODEL=build();
+  for(const p of MODEL.pend)if(p.auto)edits[p.key]=p.auto;
   $("results").hidden=false;
   $("s-base").textContent=BASE.data.length;$("s-ok").textContent=MODEL.ok;$("s-bad").textContent=MODEL.bad;
   updatePendCount();
   $("pend-panel").hidden=!MODEL.pend.length;
-  $("pend-list").innerHTML=MODEL.pend.map(p=>`<div class="pend-row"><div><div class="who">${esc(p.who)}</div><div class="what">${esc(p.what)} · fila ${p.row}, columna ${p.col}</div></div>
+  $("pend-list").innerHTML=MODEL.pend.slice().sort((a,b)=>(!!a.auto)-(!!b.auto)).map(p=>`<div class="pend-row"><div><div class="who">${esc(p.who)}</div><div class="what">${esc(p.what)} · fila ${p.row}, columna ${p.col}${p.auto?" · <b>puesto automático, cambia si no es correcto</b>":""}</div></div>
     <select id="sel-${p.key}" data-key="${p.key}" aria-label="${esc(p.what)}"><option value="">Elegir…</option>${p.opts.map(o=>`<option${edits[p.key]===o?" selected":""}>${o}</option>`).join("")}</select></div>`).join("");
   $("pend-list").querySelectorAll("select").forEach(s=>{if(s.value)s.classList.add("filled");s.addEventListener("change",()=>{edits[s.dataset.key]=s.value||undefined;s.classList.toggle("filled",!!s.value);updatePendCount()})});
   renderTable();
@@ -231,7 +292,7 @@ function renderTable(){
   const w=MODEL.rep.filter(x=>x.estado==="warn").length;
   $("rep-sub").textContent=`${MODEL.rep.length} colaboradores · ${w} con alertas para revisar en el formato.`;
   const lbl={ok:"OK",warn:"Revisar",bad:"No cargado"};
-  $("rep-body").innerHTML=rows.map(x=>`<tr><td class="num">${esc(x.pos)}</td><td>${esc(x.nombre)}</td><td class="num">${x.fila}</td><td><span class="pill ${x.estado}">${lbl[x.estado]}</span></td><td>${esc(x.obs)}</td></tr>`).join("")||`<tr><td colspan="5">Sin alertas.</td></tr>`;
+  $("rep-body").innerHTML=rows.map(x=>`<tr><td class="num">${esc(x.pos)}</td><td>${esc(x.nombre)}</td><td class="num">${x.fb??""}</td><td class="num">${x.fila}</td><td><span class="pill ${x.estado}">${lbl[x.estado]}</span></td><td>${esc(x.obs)}</td></tr>`).join("")||`<tr><td colspan="6">Sin alertas.</td></tr>`;
 }
 $("btn-filter").addEventListener("click",e=>{onlyAlerts=!onlyAlerts;e.currentTarget.setAttribute("aria-pressed",onlyAlerts);e.currentTarget.textContent=onlyAlerts?"Ver todos":"Ver solo alertas";renderTable()});
 

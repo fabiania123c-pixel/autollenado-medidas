@@ -57,13 +57,13 @@
       <div class="stats">
         <div class="stat"><div class="v" id="s-base">0</div><div class="l">en la base</div></div>
         <div class="stat ok"><div class="v" id="s-ok">0</div><div class="l">cargados en el formato</div></div>
-        <div class="stat warn"><div class="v" id="s-pend">0</div><div class="l">datos por completar aquí</div></div>
+        <div class="stat warn"><div class="v" id="s-pend">0</div><div class="l">datos sin completar</div></div>
         <div class="stat bad"><div class="v" id="s-bad">0</div><div class="l">no cargados (revisar base)</div></div>
       </div>
 
       <div class="panel" id="pend-panel" hidden>
         <div class="panel-head">
-          <div><h2>Completa antes de descargar</h2><p class="sub">El formulario no pide estos datos. Lo que elijas aquí entra directo al formato.</p></div>
+          <div><h2>Sexo de las cargas</h2><p class="sub">El formulario no lo pide: se puso automático por el nombre. Solo cambia alguno si no es correcto.</p></div>
         </div>
         <div class="pend" id="pend-list"></div>
       </div>
@@ -75,7 +75,7 @@
         </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Posición</th><th>Colaborador</th><th>Fila</th><th>Estado</th><th>Observación</th></tr></thead>
+            <thead><tr><th>Posición</th><th>Colaborador</th><th>Fila base</th><th>Fila formato</th><th>Estado</th><th>Observación</th></tr></thead>
             <tbody id="rep-body"></tbody>
           </table>
         </div>
