@@ -31,7 +31,7 @@ function provincia(c){c=String(c||"").toUpperCase();for(const [k,p] of PROV)if(c
 function splitAp(ap){if(!ap)return [null,null];const s=String(ap);const i=s.indexOf(" ");return i<0?[s,null]:[s.slice(0,i),s.slice(i+1)]}
 function idStr(v){if(v==null)return null;let s=typeof v==="number"?String(Math.round(v)):String(v);if(/^\d{9}$/.test(s))s="0"+s;return s}
 // celular: Excel borra el 0 inicial (995026435 -> 0995026435); +593 9... -> 09...
-function cel(v){if(v==null)return null;const d=String(typeof v==="number"?Math.round(v):v).replace(/\D/g,"");if(/^9\d{8}$/.test(d))return "0"+d;if(/^5939\d{8}$/.test(d))return "0"+d.slice(3);return v}
+function cel(v){if(v==null)return null;const d=String(typeof v==="number"?Math.round(v):v).replace(/\D/g,"");if(/^9\d{8}$/.test(d))return "0"+d;if(/^5939\d{8}$/.test(d))return "0"+d.slice(3);if(/^09\d{8}$/.test(d))return d;return v}
 const colIdx=c=>[...c].reduce((a,ch)=>a*26+ch.charCodeAt(0)-64,0);
 
 // Sexo a partir del nombre (nombres comunes en Ecuador). Devuelve "VARON", "MUJER" o null si no es seguro.
@@ -78,7 +78,10 @@ async function readBase(file){
   const TIPOS=["Cuenta de Ahorros","Cuenta Corriente"],NIV=["Primaria","Secundaria","Tecnica y Superior","Universitaria","Post Grado"];
   const data=[];
   rows.forEach((r,i)=>{
-    if(i<=hdr||!r||!r[4]||String(r[4]).startsWith("Ingresa tus"))return;
+    // una fila cuenta si tiene nombre, apellido o cédula (antes se saltaba si faltaba el nombre)
+    if(i<=hdr||!r||String(r[4]||"").startsWith("Ingresa tus"))return;
+    const tiene=x=>x!=null&&String(x).trim()!=="";
+    if(!(tiene(r[4])||tiene(r[5])||tiene(r[6])||/[1-9]/.test(String(r[11]??""))))return;
     let a=[];for(let j=0;j<60;j++)a[j]=clean(r[j]);
     // fila corrida: buscar cuántas columnas se movieron desde la M (cuenta) y volver a alinear
     let corr=0;
@@ -163,10 +166,13 @@ function build(){
     if(toSerial(b[8])==null)corr.push("fecha de nacimiento");
     if(corr.length>=1&&(corr.length>=2||corr.includes("cuenta igual a la cédula"))){bad++;rep.push({pos,nombre,fb:b.filaBase,fila:FMT.filaPos[pos],estado:"bad",obs:"Datos corridos de columna en la base ("+corr.join(", ")+"). No se cargó: revisa esta fila en la base."});continue}
     const r=FMT.filaPos[pos],obs=[];
+    if(!b[4])obs.push("Sin nombres en la base (columna E): se cargó con los apellidos, completa el nombre");
     for(const i of [4,5,6]){const f=nombreFix(b[i]);if(f!==b[i]){obs.push(`Nombre «${b[i]}» corregido a «${f}»`);b[i]=f}}
     const resi=ciudad(util(b[14]));let resiF=resi;
     if(resi&&!/^(Quito|Sangolquí)$/.test(resi)&&/^(ECUADOR|PICHINCHA)$/i.test(String(resi).trim())){resiF="Quito";obs.push(`Ciudad de residencia «${resi}»: se puso Quito`)}
-    const mail=b[39]!=null?String(b[39]).replace(/\s+/g,""):null;
+    let mail=b[39]!=null?String(b[39]).replace(/\s+/g,""):null;
+    if(mail){const fix=mail.replace(/@(gamail|gmial|gmal|gmai|gmil|gmaill|gnail)\.com$/i,"@gmail.com").replace(/@(hotmial|hotmal|hotmai|hotmaill)\.com$/i,"@hotmail.com").replace(/@(yaho|yahooo)\.com$/i,"@yahoo.com").replace(/\.con$/i,".com");
+      if(fix!==mail){obs.push(`Correo «${mail}» corregido a «${fix}»`);mail=fix}}
     if(mail&&!/^[^@]+@[^@]+\.[A-Za-z]{2,}$/.test(mail))obs.push(`Correo incompleto («${mail}»)`);
     const v={Q:b[3],R:b[5],S:b[6],T:b[4],U:ciudad(util(b[7])),V:b[8],W:ECIVIL[b[9]]||b[9],X:NAC[String(b[10]||"").toUpperCase()]||b[10],
       Y:idStr(b[11]),Z:"PRODUBANCO",AA:b[12],AB:b[13],AC:util(b[15]),AE:resiF,AF:util(b[16]),AG:provincia(resiF),
