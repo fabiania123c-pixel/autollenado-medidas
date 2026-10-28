@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id);
 
 /* ---------- mapa de columnas (referencia visible) ---------- */
-const MAP=[["Q","Tratamiento"],["R","Primer apellido"],["S","Segundo apellido"],["T","Nombres"],["U","Ciudad de nacimiento"],["V","Fecha de nacimiento"],["W","Estado civil"],["X","Nacionalidad"],["Y","Cédula"],["Z","PRODUBANCO"],["AA","Cuenta Produbanco"],["AB","Tipo de cuenta"],["AC","Dirección"],["AE","Ciudad donde reside"],["AF","Teléfono convencional"],["AG","Provincia (por ciudad)"],["AH","Inicio de estudios"],["AI","ECUADOR"],["AJ","Título obtenido"],["AK","Nivel de estudios"],["AL","Institución"],["AM","Título según nivel y fecha fin"],["AN","Correo"],["AO","Celular"],["AP–AY","Carga 1: tipo, apellidos, nombres, fecha, nacionalidad, ciudad, cédula"],["BC–BL","Carga 2: mismos campos"],["AT / BG","Sexo de la carga (lo eliges aquí)"]];
+const MAP=[["Q","Tratamiento"],["R","Primer apellido"],["S","Segundo apellido"],["T","Nombres"],["U","Ciudad de nacimiento"],["V","Fecha de nacimiento"],["W","Estado civil"],["X","Nacionalidad"],["Y","Cédula"],["Z","PRODUBANCO"],["AA","Cuenta Produbanco"],["AB","Tipo de cuenta"],["AC","Dirección"],["AE","Ciudad donde reside"],["AF","Teléfono convencional"],["AG","Provincia (por ciudad)"],["AH","Inicio de estudios"],["AI","ECUADOR"],["AJ","Título obtenido"],["AK","Nivel de estudios"],["AL","Institución"],["AM","Título según nivel y fecha fin"],["AN","Correo"],["AO","Celular"],["AP–AY","Carga 1: tipo, apellidos, nombres, fecha, nacionalidad, ciudad, cédula"],["BC–BL","Carga 2: mismos campos"],["AT / BG","Sexo de la carga (automático por el nombre)"]];
 $("map").innerHTML=MAP.map(([c,t])=>`<div><code>${c}</code><span>${t}</span></div>`).join("");
 
 /* ---------- utilidades ---------- */
@@ -283,7 +283,7 @@ function render(){
   updatePendCount();
   $("pend-panel").hidden=!MODEL.pend.length;
   $("pend-list").innerHTML=MODEL.pend.slice().sort((a,b)=>(!!a.auto)-(!!b.auto)).map(p=>`<div class="pend-row"><div><div class="who">${esc(p.who)}</div><div class="what">${esc(p.what)} · fila ${p.row}, columna ${p.col}${p.auto?" · <b>puesto automático, cambia si no es correcto</b>":""}</div></div>
-    <select id="sel-${p.key}" data-key="${p.key}" aria-label="${esc(p.what)}"><option value="">Elegir…</option>${p.opts.map(o=>`<option${edits[p.key]===o?" selected":""}>${o}</option>`).join("")}</select></div>`).join("");
+    <select id="sel-${p.key}" data-key="${p.key}" aria-label="${esc(p.what)}"><option value="">Elegir…</option>${p.opts.map(o=>`<option value="${o}"${edits[p.key]===o?" selected":""}>${{VARON:"Masculino",MUJER:"Femenino"}[o]||o}</option>`).join("")}</select></div>`).join("");
   $("pend-list").querySelectorAll("select").forEach(s=>{if(s.value)s.classList.add("filled");s.addEventListener("change",()=>{edits[s.dataset.key]=s.value||undefined;s.classList.toggle("filled",!!s.value);updatePendCount()})});
   renderTable();
   $("dl-note").className="dl-note";
